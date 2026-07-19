@@ -263,10 +263,7 @@ const AdminUsersPage = () => {
                                         <td style={styles.td}>{user.username}</td>
                                         <td style={styles.td}>{user.email || '-'}</td>
                                         <td style={styles.td}>
-                                            <span style={{ fontFamily: 'monospace', fontSize: '13px', color: user.plain_password ? '#389e0d' : '#999', cursor: 'pointer' }}
-                                                  onClick={() => { setResetPasswordUser(user); setNewPassword(''); setResetPasswordError(null); setShowPasswordModal(true); }}>
-                                                {user.plain_password || '未设置'}
-                                            </span>
+                                            <span style={{ fontFamily: 'monospace', fontSize: '13px', color: '#999' }}>已加密</span>
                                         </td>
                                         <td style={styles.td}>{getRoleBadge(user.roles)}</td>
                                         <td style={styles.td}>{getStatusBadge(user.status)}</td>
@@ -407,9 +404,9 @@ const AdminUsersPage = () => {
                         <h3 style={styles.modalTitle}>重置密码 - {resetPasswordUser?.username}</h3>
                         {resetPasswordError && <div style={styles.errorMsg}>{resetPasswordError}<span style={styles.closeBtn} onClick={() => setResetPasswordError(null)}>×</span></div>}
                         <div style={styles.formGroup}>
-                            <label style={styles.label}>当前密码</label>
-                            <div style={{ padding: '8px 12px', background: '#f5f5f5', borderRadius: '4px', fontFamily: 'monospace', fontSize: '14px', color: '#389e0d' }}>
-                                {resetPasswordUser?.plain_password || '未知'}
+                            <label style={styles.label}>当前密码（已加密存储，不可查看）</label>
+                            <div style={{ padding: '8px 12px', background: '#f5f5f5', borderRadius: '4px', fontSize: '14px', color: '#999' }}>
+                                出于安全考虑，密码已加密存储，无法查看明文
                             </div>
                         </div>
                         <div style={styles.formGroup}>
