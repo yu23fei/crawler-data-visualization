@@ -96,11 +96,11 @@ def get_v2_analysis():
         ]
 
         cursor.execute(
-            "SELECT company_nature, COUNT(*) as cnt FROM jobs_analysis "
-            "GROUP BY company_nature ORDER BY cnt DESC"
+            "SELECT property, COUNT(*) as cnt FROM jobs_analysis "
+            "GROUP BY property ORDER BY cnt DESC LIMIT 15"
         )
-        result['company_nature_distribution'] = [
-            {'name': r['company_nature'], 'value': r['cnt']} for r in cursor.fetchall()
+        result['company_type_distribution'] = [
+            {'name': r['property'] or '未知', 'value': r['cnt']} for r in cursor.fetchall()
         ]
 
         cursor.execute(
@@ -139,13 +139,37 @@ def get_v2_analysis():
             {'name': r['exp_range'], 'value': float(r['avg_sal'])} for r in cursor.fetchall()
         ]
 
-        cursor.execute(
-            "SELECT benefit_score, COUNT(*) as cnt FROM jobs_salary_benefit "
-            "GROUP BY benefit_score ORDER BY benefit_score"
-        )
-        result['benefit_distribution'] = [
-            {'name': str(r['benefit_score']), 'value': r['cnt']} for r in cursor.fetchall()
-        ]
+        cursor.execute("""
+            SELECT benefit_score, COUNT(*) as cnt,
+                ROUND(COUNT(*) * 100.0 / (SELECT COUNT(*) FROM jobs_analysis), 1) as pct
+            FROM jobs_analysis
+            GROUP BY benefit_score
+            ORDER BY benefit_score
+        """)
+        benefit_labels = {
+            0: "无福利", 1: "1项", 2: "2项", 3: "3项",
+            4: "4项", 5: "5项", 6: "6项", 7: "7项"
+        }
+        benefit_desc = {
+            0: "岗位未提供任何福利项",
+            1: "仅提供1项福利（多为社保）",
+            2: "提供2项福利",
+            3: "提供3项福利",
+            4: "提供4项福利",
+            5: "提供5项福利",
+            6: "提供6项及以上福利",
+            7: "提供全部7项福利"
+        }
+        result["benefit_score_distribution"] = []
+        for r in cursor.fetchall():
+            score = r["benefit_score"]
+            result["benefit_score_distribution"].append({
+                "name": benefit_labels.get(score, str(score)),
+                "value": r["cnt"],
+                "pct": float(r["pct"]),
+                "score": score,
+                "desc": benefit_desc.get(score, "未知")
+            })
 
         cursor.execute(
             "SELECT work_type, COUNT(*) as cnt FROM jobs_analysis "
@@ -165,12 +189,35 @@ def get_v2_analysis():
         ]
 
         cursor.execute("""
-            SELECT company_nature, company_size,
-                   COUNT(*) as cnt, ROUND(AVG(salary_avg), 0) as avg_sal
-            FROM jobs_analysis WHERE salary_avg > 0
-            GROUP BY company_nature, company_size ORDER BY cnt DESC
+            SELECT education_std, salary_range, COUNT(*) as cnt
+            FROM jobs_analysis WHERE salary_range IS NOT NULL
+            GROUP BY education_std, salary_range
         """)
-        result['company_cross'] = cursor.fetchall()
+        heatmap = {}
+        edu_set = set()
+        sal_set = set()
+        for r in cursor.fetchall():
+            edu = r['education_std']
+            sal = r['salary_range']
+            key = f"{edu}|{sal}"
+            heatmap[key] = r['cnt']
+            edu_set.add(edu)
+            sal_set.add(sal)
+        result['heatmap_edu_salary'] = {
+            'education': list(edu_set),
+            'salary': list(sal_set),
+            'data': heatmap
+        }
+
+        cursor.execute("""
+            SELECT company_size, property, COUNT(*) as cnt
+            FROM jobs_analysis GROUP BY company_size, property
+        """)
+        cross_size_type = {}
+        for r in cursor.fetchall():
+            key = f"{r['company_size']}|{r['property']}"
+            cross_size_type[key] = r['cnt']
+        result['company_cross'] = cross_size_type
 
     finally:
         conn.close()
@@ -248,9 +295,9 @@ def filter_v2_data():
     if data.get('company_size'):
         conditions.append("ja.company_size = %s")
         params.append(data['company_size'])
-    if data.get('company_nature'):
-        conditions.append("ja.company_nature = %s")
-        params.append(data['company_nature'])
+    if data.get('company_type'):
+        conditions.append("ja.property = %s")
+        params.append(data['company_type'])
 
     where_clause = " AND ".join(conditions) if conditions else "1=1"
 
@@ -326,10 +373,10 @@ def get_filter_options():
     company_sizes = [r['company_size'] for r in cursor.fetchall()]
 
     cursor.execute(
-        "SELECT DISTINCT company_nature FROM jobs_analysis "
-        "WHERE company_nature IS NOT NULL ORDER BY company_nature"
+        "SELECT DISTINCT property FROM jobs_analysis "
+        "WHERE property IS NOT NULL ORDER BY property"
     )
-    company_natures = [r['company_nature'] for r in cursor.fetchall()]
+    company_types = [r['property'] for r in cursor.fetchall()]
 
     conn.close()
 
@@ -341,6 +388,6 @@ def get_filter_options():
             'experiences': experiences,
             'industries': industries,
             'company_sizes': company_sizes,
-            'company_natures': company_natures
+            'company_types': company_types
         }
     })
