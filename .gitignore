@@ -62,7 +62,18 @@ yarn-error.log*
 
 # Testing
 coverage/
+.pytest_cache/
 
 # Database
 *.db
 *.sqlite3
+
+# 日志
+logs/
+*.log
+
+# 个人本地脚本/图标（不提交）
+nul
+deepseek.ico
+launch-deepseek.ps1
+launch-deepseek.vbs

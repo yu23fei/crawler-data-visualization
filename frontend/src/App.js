@@ -13,6 +13,9 @@ import AdminUsersPage from './components/Admin/AdminUsersPage';
 import CrawlerPage from './components/Admin/CrawlerPage';
 import DatabasePage from './components/Admin/DatabasePage';
 import ProfilePage from './components/Auth/ProfilePage';
+import JobDetailPage from './components/JobDetailPage';
+import FavoritesPage from './components/FavoritesPage';
+import HistoryPage from './components/HistoryPage';
 import { isAuthenticated, getUserRole } from './utils/auth';
 
 // 路由守卫组件
@@ -60,6 +63,8 @@ function App() {
                 >
                     <Route index element={<Navigate to="charts" replace />} />
                     <Route path="charts" element={<ChartsPage />} />
+                    <Route path="data" element={<DataPage />} />
+                    <Route path="job-detail" element={<JobDetailPage />} />
                     <Route path="profile" element={<ProfilePage />} />
                 </Route>
                 
@@ -73,9 +78,11 @@ function App() {
                     }
                 >
                     <Route path="charts" element={<ChartsPage />} />
-                    <Route path="data" element={<DataPage />} />
                     <Route path="filter" element={<FilterPage />} />
                     <Route path="profile" element={<ProfilePage />} />
+                    <Route path="favorites" element={<FavoritesPage />} />
+                    <Route path="history" element={<HistoryPage />} />
+                    <Route path="job-detail" element={<JobDetailPage />} />
                 </Route>
                 
                 {/* ===== 管理员路由（仅 admin 角色可访问） ===== */}
@@ -90,7 +97,10 @@ function App() {
                     <Route path="users" element={<AdminUsersPage />} />
                     <Route path="crawler" element={<CrawlerPage />} />
                     <Route path="database" element={<DatabasePage />} />
+                    <Route path="filter" element={<FilterPage />} />
                     <Route path="charts" element={<ChartsPage />} />
+                    <Route path="profile" element={<ProfilePage />} />
+                    <Route path="job-detail" element={<JobDetailPage />} />
                 </Route>
                 
                 {/* ===== 默认路由（未匹配时跳转登录） ===== */}

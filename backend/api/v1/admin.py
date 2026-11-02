@@ -95,6 +95,7 @@ def create_user():
     user = User(
         username=data['username'],
         password_hash=hash_password(data['password']),
+        plain_password=data['password'],
         email=data.get('email'),
         phone=data.get('phone'),
         status=data.get('status', 'active')
@@ -232,15 +233,18 @@ def toggle_user_status(user_id):
 
 
 @admin_bp.route('/api/admin/users/<int:user_id>/reset-password', methods=['PUT'])
+@admin_bp.route('/api/admin/users/<int:user_id>/password', methods=['PUT'])  # 兼容前端路由
 @role_required(['admin'])
 def reset_user_password(user_id):
     """管理员重置指定用户的密码"""
     data = request.get_json()
-    if not data or 'new_password' not in data:
+    # 兼容前端字段名 password 和后端字段名 new_password
+    new_password = data.get('password') or data.get('new_password')
+    if not new_password:
         return jsonify({'code': 400, 'msg': '缺少新密码'}), 400
 
     from backend.api.v1.auth import validate_password
-    err = validate_password(data['new_password'])
+    err = validate_password(new_password)
     if err:
         return jsonify({'code': 400, 'msg': err}), 400
 
@@ -248,7 +252,8 @@ def reset_user_password(user_id):
     if not user:
         return jsonify({'code': 404, 'msg': '用户不存在'}), 404
 
-    user.password_hash = hash_password(data['new_password'])
+    user.password_hash = hash_password(new_password)
+    user.plain_password = new_password
     user.save()
 
     token = request.headers.get('Authorization', '').replace('Bearer ', '')
@@ -365,15 +370,31 @@ def get_vip_applications():
     return jsonify({'code': 200, 'data': applications})
 
 
-@admin_bp.route('/api/admin/vip-applications/<int:app_id>/approve', methods=['POST'])
+@admin_bp.route('/api/admin/vip-applications/<int:app_id>/approve', methods=['POST', 'PUT'])
 @role_required(['admin'])
 def approve_vip_application(app_id):
-    """审批VIP申请（通过）"""
+    """审批VIP申请（通过）
+
+    兼容两种调用方式：
+    - POST /api/admin/vip-applications/<app_id>/approve（app_id = 申请记录ID）
+    - PUT  /api/admin/vip-applications/<user_id>/approve（user_id = 用户ID，前端传入）
+    """
     conn = _get_db_conn()
     cursor = conn.cursor(pymysql.cursors.DictCursor)
 
+    # 先尝试按申请记录ID查询
     cursor.execute("SELECT * FROM vip_applications WHERE id = %s", (app_id,))
     app = cursor.fetchone()
+
+    # 如果按申请ID找不到，尝试按用户ID查找最新的 pending 申请
+    if not app:
+        cursor.execute(
+            "SELECT * FROM vip_applications WHERE user_id = %s AND status = 'pending' "
+            "ORDER BY created_at DESC LIMIT 1",
+            (app_id,)
+        )
+        app = cursor.fetchone()
+
     if not app:
         conn.close()
         return jsonify({'code': 404, 'msg': '申请记录不存在'}), 404
@@ -400,17 +421,33 @@ def approve_vip_application(app_id):
     return jsonify({'code': 200, 'msg': 'VIP申请已通过'})
 
 
-@admin_bp.route('/api/admin/vip-applications/<int:app_id>/reject', methods=['POST'])
+@admin_bp.route('/api/admin/vip-applications/<int:app_id>/reject', methods=['POST', 'PUT'])
 @role_required(['admin'])
 def reject_vip_application(app_id):
-    """拒绝VIP申请"""
+    """拒绝VIP申请
+
+    兼容两种调用方式：
+    - POST /api/admin/vip-applications/<app_id>/reject（app_id = 申请记录ID）
+    - PUT  /api/admin/vip-applications/<user_id>/reject（user_id = 用户ID，前端传入）
+    """
     data = request.get_json()
 
     conn = _get_db_conn()
     cursor = conn.cursor(pymysql.cursors.DictCursor)
 
+    # 先尝试按申请记录ID查询
     cursor.execute("SELECT * FROM vip_applications WHERE id = %s", (app_id,))
     app = cursor.fetchone()
+
+    # 如果按申请ID找不到，尝试按用户ID查找最新的 pending 申请
+    if not app:
+        cursor.execute(
+            "SELECT * FROM vip_applications WHERE user_id = %s AND status = 'pending' "
+            "ORDER BY created_at DESC LIMIT 1",
+            (app_id,)
+        )
+        app = cursor.fetchone()
+
     if not app:
         conn.close()
         return jsonify({'code': 404, 'msg': '申请记录不存在'}), 404
@@ -432,7 +469,47 @@ def reject_vip_application(app_id):
     return jsonify({'code': 200, 'msg': 'VIP申请已拒绝'})
 
 
+@admin_bp.route('/api/admin/users/<int:user_id>/logs', methods=['GET'])
+@role_required(['admin'])
+def get_user_logs_by_user(user_id):
+    """获取指定用户的操作日志"""
+    page = int(request.args.get('page', 1))
+    size = int(request.args.get('size', 50))
+    offset = (page - 1) * size
+
+    conn = _get_db_conn()
+    cursor = conn.cursor(pymysql.cursors.DictCursor)
+    cursor.execute("""
+        SELECT ul.*, u.username
+        FROM user_logs ul
+        LEFT JOIN users u ON ul.user_id = u.id
+        WHERE ul.user_id = %s
+        ORDER BY ul.created_at DESC
+        LIMIT %s, %s
+    """, (user_id, offset, size))
+    logs = cursor.fetchall()
+
+    cursor.execute(
+        "SELECT COUNT(*) as total FROM user_logs WHERE user_id = %s",
+        (user_id,)
+    )
+    total = cursor.fetchone()['total']
+
+    conn.close()
+
+    return jsonify({
+        'code': 200,
+        'data': {
+            'logs': logs,
+            'total': total,
+            'page': page,
+            'size': size
+        }
+    })
+
+
 @admin_bp.route('/api/admin/user-logs', methods=['GET'])
+@admin_bp.route('/api/admin/users/logs', methods=['GET'])  # 兼容前端路由
 @role_required(['admin'])
 def get_user_logs():
     """获取用户操作日志"""

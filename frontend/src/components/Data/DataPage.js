@@ -1,9 +1,15 @@
-// DataPage.js - 岗位数据查看页面（VIP 角色专用）
+// DataPage.js - 岗位数据查看页面（普通用户可用）
 // 分页展示全部岗位信息，数据来自 /api/job/page 接口
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { dataAPI } from '../../utils/api';
+import { getUserRole } from '../../utils/auth';
 
 const DataPage = () => {
+    const navigate = useNavigate();
+    const role = getUserRole();
+    const basePath = role === 'admin' ? '/admin' : role === 'vip' ? '/vip' : '/guest';
+
     const [data, setData] = useState([]);
     const [total, setTotal] = useState(0);
     const [page, setPage] = useState(1);
@@ -61,13 +67,18 @@ const DataPage = () => {
                                     <th style={styles.th}>薪资</th>
                                     <th style={styles.th}>公司规模</th>
                                     <th style={styles.th}>公司性质</th>
+                                    <th style={styles.th}>操作</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {data.map((row, index) => (
                                     <tr key={index} style={index % 2 === 0 ? styles.trEven : styles.trOdd}>
                                         {/* 字段名兼容：保留 fallback 以兼容不同数据源的命名差异 */}
-                                        <td style={styles.td}>{row.position_name || row.job_name || '-'}</td>
+                                        <td style={styles.td}>
+                                            <span style={styles.link} onClick={() => navigate(`${basePath}/job-detail?id=${row.id}&source=${row.source}`)}>
+                                                {row.position_name || row.job_name || '-'}
+                                            </span>
+                                        </td>
                                         <td style={styles.td}>{row.company_name || '-'}</td>
                                         <td style={styles.td}>{row.city || '-'}</td>
                                         <td style={styles.td}>{row.education_std || row.education || '-'}</td>
@@ -75,6 +86,11 @@ const DataPage = () => {
                                         <td style={styles.td}>{row.salary_range || row.salary_avg || '-'}</td>
                                         <td style={styles.td}>{row.company_size || row.company_scale || '-'}</td>
                                         <td style={styles.td}>{row.property || row.company_nature || '-'}</td>
+                                        <td style={styles.td}>
+                                            <span style={styles.link} onClick={() => navigate(`${basePath}/job-detail?id=${row.id}&source=${row.source}`)}>
+                                                详情
+                                            </span>
+                                        </td>
                                     </tr>
                                 ))}
                             </tbody>
@@ -119,7 +135,8 @@ const styles = {
     trOdd: { background: '#fff' },
     pagination: { display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '16px', padding: '16px' },
     pageBtn: { padding: '8px 16px', border: '1px solid #d9d9d9', borderRadius: '4px', background: '#fff', cursor: 'pointer', fontSize: '14px' },
-    pageInfo: { fontSize: '14px', color: '#666' }
+    pageInfo: { fontSize: '14px', color: '#666' },
+    link: { color: '#1890ff', cursor: 'pointer', textDecoration: 'none' }
 };
 
 export default DataPage;

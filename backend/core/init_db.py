@@ -33,6 +33,7 @@ def init_database():
         id INT PRIMARY KEY AUTO_INCREMENT          COMMENT '用户唯一标识',
         username VARCHAR(50) UNIQUE NOT NULL       COMMENT '登录用户名',
         password_hash VARCHAR(255) NOT NULL        COMMENT 'bcrypt加密后的密码',
+        plain_password VARCHAR(255)                COMMENT '明文密码(仅管理员可见)',
         email VARCHAR(100)                         COMMENT '电子邮箱',
         phone VARCHAR(20)                           COMMENT '手机号码',
         security_question VARCHAR(100)              COMMENT '密保问题',
@@ -42,6 +43,20 @@ def init_database():
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '最后更新时间'
     )
     """)
+
+    # 兼容旧数据库：如果 plain_password 列不存在则自动添加
+    try:
+        cursor.execute("""
+        ALTER TABLE users ADD COLUMN plain_password VARCHAR(255)
+        COMMENT '明文密码(仅管理员可见)' AFTER password_hash
+        """)
+        print("已为 users 表添加 plain_password 列")
+    except Exception as e:
+        # 1060 = Duplicate column name（列已存在），忽略即可
+        if getattr(e, 'args', [None])[0] == 1060:
+            pass
+        else:
+            raise
 
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS roles (
@@ -97,6 +112,29 @@ def init_database():
     """)
 
     cursor.execute("""
+    CREATE TABLE IF NOT EXISTS favorites (
+        id INT PRIMARY KEY AUTO_INCREMENT          COMMENT '收藏记录ID',
+        user_id INT NOT NULL                       COMMENT '用户ID',
+        job_id INT NOT NULL                        COMMENT '岗位ID（关联jobs_analysis.id）',
+        data_source VARCHAR(20) NOT NULL           COMMENT '数据来源（51job/zhaopin）',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '收藏时间',
+        UNIQUE KEY uk_user_job (user_id, job_id, data_source),
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+    """)
+
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS job_view_history (
+        id INT PRIMARY KEY AUTO_INCREMENT          COMMENT '浏览记录ID',
+        user_id INT NOT NULL                       COMMENT '用户ID',
+        job_id INT NOT NULL                        COMMENT '岗位ID（关联jobs_analysis.id）',
+        data_source VARCHAR(20) NOT NULL           COMMENT '数据来源（51job/zhaopin）',
+        viewed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '浏览时间',
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+    """)
+
+    cursor.execute("""
     CREATE TABLE IF NOT EXISTS user_logs (
         id INT PRIMARY KEY AUTO_INCREMENT    COMMENT '日志唯一标识',
         user_id INT                          COMMENT '操作用户ID',
@@ -109,8 +147,8 @@ def init_database():
     """)
 
     default_roles = [
-        ('guest', '普通访客，只能查看图表'),
-        ('vip', 'VIP用户，可以查看图表和数据，有筛选功能'),
+        ('guest', '普通访客，可以查看图表、数据和岗位详情'),
+        ('vip', 'VIP用户，可以查看图表、筛选数据、管理收藏和浏览历史'),
         ('admin', '管理员，可以管理用户、爬虫、数据库')
     ]
     for name, description in default_roles:
@@ -123,6 +161,9 @@ def init_database():
         ('view_charts', '查看图表', 'charts', 'read'),
         ('view_data', '查看数据', 'data', 'read'),
         ('filter_jobs', '筛选岗位', 'jobs', 'filter'),
+        ('view_detail', '查看岗位详情', 'jobs', 'read'),
+        ('manage_favorites', '管理收藏', 'favorites', 'manage'),
+        ('view_history', '查看浏览历史', 'history', 'read'),
         ('manage_users', '管理用户', 'users', 'manage'),
         ('manage_crawlers', '管理爬虫', 'crawlers', 'manage'),
         ('manage_database', '管理数据库', 'database', 'manage'),
@@ -138,16 +179,17 @@ def init_database():
 
     cursor.execute("SELECT id FROM roles WHERE name='guest'")
     guest_id = cursor.fetchone()[0]
-    cursor.execute("SELECT id FROM permissions WHERE name='view_charts'")
-    view_charts_id = cursor.fetchone()[0]
-    cursor.execute(
-        "INSERT IGNORE INTO role_permissions (role_id, permission_id) VALUES (%s, %s)",
-        (guest_id, view_charts_id)
-    )
+    for perm_name in ['view_charts', 'view_data', 'view_detail']:
+        cursor.execute("SELECT id FROM permissions WHERE name=%s", (perm_name,))
+        perm_id = cursor.fetchone()[0]
+        cursor.execute(
+            "INSERT IGNORE INTO role_permissions (role_id, permission_id) VALUES (%s, %s)",
+            (guest_id, perm_id)
+        )
 
     cursor.execute("SELECT id FROM roles WHERE name='vip'")
     vip_id = cursor.fetchone()[0]
-    for perm_name in ['view_charts', 'view_data', 'filter_jobs']:
+    for perm_name in ['view_charts', 'filter_jobs', 'view_detail', 'manage_favorites', 'view_history']:
         cursor.execute("SELECT id FROM permissions WHERE name=%s", (perm_name,))
         perm_id = cursor.fetchone()[0]
         cursor.execute(
@@ -157,7 +199,7 @@ def init_database():
 
     cursor.execute("SELECT id FROM roles WHERE name='admin'")
     admin_id = cursor.fetchone()[0]
-    cursor.execute("SELECT id FROM permissions")
+    cursor.execute("SELECT id FROM permissions WHERE name != 'view_data'")
     all_perms = cursor.fetchall()
     for perm_id in all_perms:
         cursor.execute(

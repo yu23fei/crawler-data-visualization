@@ -19,10 +19,12 @@ class User:
 
     def __init__(self, id=None, username=None, password_hash=None, email=None,
                  phone=None, security_question=None, security_answer=None,
-                 status=None, created_at=None, updated_at=None):
+                 status=None, created_at=None, updated_at=None,
+                 plain_password=None, **kwargs):
         self.id = id
         self.username = username
         self.password_hash = password_hash
+        self.plain_password = plain_password
         self.email = email
         self.phone = phone
         self.security_question = security_question
@@ -68,17 +70,20 @@ class User:
             cursor = conn.cursor()
             if self.id:
                 cursor.execute("""
-                    UPDATE users SET username=%s, password_hash=%s, email=%s, phone=%s,
-                    security_question=%s, security_answer=%s, status=%s
+                    UPDATE users SET username=%s, password_hash=%s, plain_password=%s,
+                    email=%s, phone=%s, security_question=%s, security_answer=%s, status=%s
                     WHERE id=%s
-                """, (self.username, self.password_hash, self.email, self.phone,
-                      self.security_question, self.security_answer, self.status, self.id))
+                """, (self.username, self.password_hash, self.plain_password,
+                      self.email, self.phone, self.security_question,
+                      self.security_answer, self.status, self.id))
             else:
                 cursor.execute("""
-                    INSERT INTO users (username, password_hash, email, phone, security_question, security_answer, status)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s)
-                """, (self.username, self.password_hash, self.email, self.phone,
-                      self.security_question, self.security_answer, self.status))
+                    INSERT INTO users (username, password_hash, plain_password, email, phone,
+                    security_question, security_answer, status)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                """, (self.username, self.password_hash, self.plain_password,
+                      self.email, self.phone, self.security_question,
+                      self.security_answer, self.status))
                 self.id = cursor.lastrowid
             conn.commit()
         return self
@@ -119,6 +124,7 @@ class User:
             'username': self.username,
             'email': self.email,
             'phone': self.phone,
+            'security_question': self.security_question,
             'status': self.status,
             'created_at': self.created_at,
             'updated_at': self.updated_at

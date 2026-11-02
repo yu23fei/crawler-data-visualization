@@ -21,6 +21,11 @@ auth_bp = Blueprint('auth', __name__)
 
 _rate_limit_store = defaultdict(lambda: defaultdict(list))
 
+# 登录失败计数与账户锁定机制（论文要求：连续5次登录失败后锁定15分钟）
+_login_attempts = defaultdict(lambda: {'count': 0, 'last_fail_time': 0})
+_LOCK_THRESHOLD = 5
+_LOCK_DURATION = 900
+
 
 def _check_rate_limit(endpoint_key, ip, max_requests, window_seconds):
     """检查指定IP在时间窗口内的请求次数是否超限"""
@@ -113,6 +118,7 @@ def register():
     user = User(
         username=data['username'],
         password_hash=hash_password(data['password']),
+        plain_password=data['password'],
         email=data.get('email'),
         phone=data.get('phone'),
         security_question=data['security_question'],
@@ -140,7 +146,7 @@ def login():
     """用户登录接口
 
     验证用户名密码，返回 JWT 令牌。
-    登录失败超过限制时触发限流。
+    实现登录限流（每IP每分钟最多5次）和账户锁定机制（连续5次失败后锁定15分钟）。
     """
     data = request.get_json()
     if not data or not data.get('username') or not data.get('password'):
@@ -155,12 +161,47 @@ def login():
         audit_log(None, 'login_failed', f"用户名不存在: {data['username']}", client_ip)
         return jsonify({'code': 401, 'msg': '用户名或密码错误'}), 401
 
+    # 账户锁定检查：若已被锁定，检查是否已过15分钟自动解锁
     if user.status == 'disabled':
-        return jsonify({'code': 403, 'msg': '账户已被禁用，请联系管理员'}), 403
+        record = _login_attempts.get(user.id)
+        if record and record.get('last_fail_time'):
+            locked_time = record['last_fail_time']
+            if time.time() - locked_time >= _LOCK_DURATION:
+                # 超过锁定时间，自动解锁
+                user.status = 'active'
+                user.save()
+                _login_attempts[user.id] = {'count': 0, 'last_fail_time': 0}
+            else:
+                remaining = int(_LOCK_DURATION - (time.time() - locked_time))
+                return jsonify({
+                    'code': 403,
+                    'msg': f'账户已被锁定，请{remaining // 60}分钟后再试'
+                }), 403
+        else:
+            # 无失败记录（如管理员手动禁用），需联系管理员
+            return jsonify({'code': 403, 'msg': '账户已被禁用，请联系管理员'}), 403
 
     if not verify_password(data['password'], user.password_hash):
         audit_log(user.id, 'login_failed', '密码错误', client_ip)
-        return jsonify({'code': 401, 'msg': '用户名或密码错误'}), 401
+        # 记录登录失败次数，连续5次失败后锁定账户
+        record = _login_attempts[user.id]
+        record['count'] += 1
+        record['last_fail_time'] = time.time()
+        if record['count'] >= _LOCK_THRESHOLD and user.status != 'disabled':
+            user.status = 'disabled'
+            user.save()
+            audit_log(user.id, 'account_locked', '连续5次登录失败，账户已被锁定15分钟', client_ip)
+            return jsonify({
+                'code': 403,
+                'msg': '连续5次登录失败，账户已被锁定，请15分钟后再试'
+            }), 403
+        return jsonify({
+            'code': 401,
+            'msg': f'用户名或密码错误，剩余{_LOCK_THRESHOLD - record["count"]}次尝试机会'
+        }), 401
+
+    # 登录成功，重置失败计数
+    _login_attempts[user.id] = {'count': 0, 'last_fail_time': 0}
 
     roles = user.get_roles()
     role_name = roles[0]['name'] if roles else 'guest'
@@ -170,9 +211,11 @@ def login():
     return jsonify({
         'code': 200,
         'msg': '登录成功',
-        'token': token,
-        'username': user.username,
-        'role': role_name
+        'data': {
+            'token': token,
+            'user': user.to_dict(),
+            'role': role_name
+        }
     })
 
 
@@ -189,12 +232,20 @@ def get_profile():
         return jsonify({'code': 404, 'msg': '用户不存在'}), 404
 
     user_data = user.to_dict()
+    user_data['plain_password'] = user.plain_password
     roles = user.get_roles()
     user_data['role'] = roles[0]['name'] if roles else 'guest'
     user_data['permissions'] = user.get_permissions()
     user_data.pop('password_hash', None)
     user_data.pop('security_answer', None)
-    return jsonify({'code': 200, 'data': user_data})
+    return jsonify({
+        'code': 200,
+        'data': {
+            'user': user_data,
+            'roles': roles,
+            'permissions': user.get_permissions()
+        }
+    })
 
 
 @auth_bp.route('/api/auth/update-profile', methods=['PUT'])
@@ -256,6 +307,7 @@ def change_password():
         return jsonify({'code': 400, 'msg': err}), 400
 
     user.password_hash = hash_password(data['new_password'])
+    user.plain_password = data['new_password']
     user.save()
 
     add_to_blacklist(token)
@@ -285,6 +337,57 @@ def reset_password():
         return jsonify({'code': 400, 'msg': err}), 400
 
     user.password_hash = hash_password(data['new_password'])
+    user.plain_password = data['new_password']
     user.save()
 
     return jsonify({'code': 200, 'msg': '密码重置成功，请使用新密码登录'})
+
+
+@auth_bp.route('/api/auth/apply-vip', methods=['POST'])
+def apply_vip():
+    """用户申请升级为VIP
+
+    当前用户提交VIP申请，自动创建一条 pending 状态的申请记录。
+    管理员可在后台审批（通过/拒绝）。
+    """
+    token = request.headers.get('Authorization', '').replace('Bearer ', '')
+    payload = verify_token(token)
+    if not payload:
+        return jsonify({'code': 401, 'msg': '未登录或令牌已过期'}), 401
+
+    user_id = payload['user_id']
+    user = User.find_by_id(user_id)
+    if not user:
+        return jsonify({'code': 404, 'msg': '用户不存在'}), 404
+
+    # 检查是否已有 pending 状态的申请
+    conn = pymysql.connect(
+        host=Config.DB_HOST, port=Config.DB_PORT,
+        user=Config.DB_USER, password=Config.DB_PASSWORD,
+        database=Config.DB_NAME, charset='utf8mb4'
+    )
+    cursor = conn.cursor(pymysql.cursors.DictCursor)
+    cursor.execute(
+        "SELECT * FROM vip_applications WHERE user_id = %s AND status = 'pending'",
+        (user_id,)
+    )
+    existing = cursor.fetchone()
+    if existing:
+        conn.close()
+        return jsonify({'code': 400, 'msg': '您已有待审批的VIP申请，请耐心等待'}), 400
+
+    # 检查是否已经是VIP
+    roles = user.get_roles()
+    role_names = [r['name'] for r in roles] if roles else []
+    if 'vip' in role_names or 'admin' in role_names:
+        conn.close()
+        return jsonify({'code': 400, 'msg': '您已是VIP或管理员，无需重复申请'}), 400
+
+    cursor.execute(
+        "INSERT INTO vip_applications (user_id, status) VALUES (%s, 'pending')",
+        (user_id,)
+    )
+    conn.commit()
+    conn.close()
+
+    return jsonify({'code': 200, 'msg': 'VIP申请已提交，请等待管理员审批'})

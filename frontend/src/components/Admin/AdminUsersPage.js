@@ -23,6 +23,10 @@ const AdminUsersPage = () => {
     const [resetPasswordUser, setResetPasswordUser] = useState(null);   // 正在重置密码的用户
     const [newPassword, setNewPassword] = useState('');                // 新密码
     const [resetPasswordError, setResetPasswordError] = useState(null); // 重置密码错误
+    const [showLogModal, setShowLogModal] = useState(false);         // 用户日志弹窗
+    const [logUser, setLogUser] = useState(null);                   // 查看日志的用户
+    const [userLogs, setUserLogs] = useState([]);                   // 用户日志列表
+    const [logLoading, setLogLoading] = useState(false);            // 日志加载中
 
     // 表单数据状态
     const [newUser, setNewUser] = useState({ username: '', password: '', email: '', phone: '', role_name: 'guest' });
@@ -32,6 +36,7 @@ const AdminUsersPage = () => {
 
     const [error, setError] = useState(null);
     const [success, setSuccess] = useState(null);
+    const [visiblePasswords, setVisiblePasswords] = useState({}); // 记录每位用户密码的显示/隐藏状态
     const size = 10; // 每页显示条数
 
     // 获取用户列表
@@ -183,6 +188,25 @@ const AdminUsersPage = () => {
         }
     };
 
+    // 查看用户操作日志
+    const handleViewLogs = async (user) => {
+        setLogUser(user);
+        setShowLogModal(true);
+        setLogLoading(true);
+        try {
+            const result = await adminAPI.getUserLogsByUserId(user.id, { page: 1, size: 50 });
+            if (result.code === 200) {
+                setUserLogs(result.data.logs || []);
+            } else {
+                setUserLogs([]);
+            }
+        } catch (err) {
+            setUserLogs([]);
+        } finally {
+            setLogLoading(false);
+        }
+    };
+
     // 保存角色权限
     const handleSavePermissions = async () => {
         const role = roles.find(r => r.name === selectedRole);
@@ -210,6 +234,11 @@ const AdminUsersPage = () => {
                 {labels[roleName] || roleName}
             </span>
         );
+    };
+
+    // 切换指定用户的密码显示/隐藏状态
+    const togglePasswordVisibility = (userId) => {
+        setVisiblePasswords(prev => ({ ...prev, [userId]: !prev[userId] }));
     };
 
     // 状态标签（带颜色）
@@ -263,7 +292,25 @@ const AdminUsersPage = () => {
                                         <td style={styles.td}>{user.username}</td>
                                         <td style={styles.td}>{user.email || '-'}</td>
                                         <td style={styles.td}>
-                                            <span style={{ fontFamily: 'monospace', fontSize: '13px', color: '#999' }}>已加密</span>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                <span style={{
+                                                    fontFamily: 'monospace',
+                                                    fontSize: '13px',
+                                                    color: visiblePasswords[user.id] ? '#262626' : '#999'
+                                                }}>
+                                                    {visiblePasswords[user.id]
+                                                        ? (user.plain_password || '(空)')
+                                                        : '••••••••'
+                                                    }
+                                                </span>
+                                                <button
+                                                    style={styles.viewPwdBtn}
+                                                    onClick={() => togglePasswordVisibility(user.id)}
+                                                    title={visiblePasswords[user.id] ? '隐藏密码' : '查看密码'}
+                                                >
+                                                    {visiblePasswords[user.id] ? '隐藏' : '查看'}
+                                                </button>
+                                            </div>
                                         </td>
                                         <td style={styles.td}>{getRoleBadge(user.roles)}</td>
                                         <td style={styles.td}>{getStatusBadge(user.status)}</td>
@@ -272,6 +319,7 @@ const AdminUsersPage = () => {
                                             <div style={styles.actions}>
                                                 <button style={styles.roleBtn} onClick={() => { setEditingUser(user); setSelectedRole(user.roles?.split(',')[0] || 'guest'); setShowRoleModal(true); }}>改角色</button>
                                                 <button style={styles.passwordBtn} onClick={() => { setResetPasswordUser(user); setNewPassword(''); setResetPasswordError(null); setShowPasswordModal(true); }}>密码</button>
+                                                <button style={styles.logBtn} onClick={() => handleViewLogs(user)}>日志</button>
                                                 <button style={user.status === 'active' ? styles.disableBtn : styles.enableBtn} onClick={() => handleStatusToggle(user.id, user.status)}>{user.status === 'active' ? '禁用' : '启用'}</button>
                                                 <button style={styles.deleteBtn} onClick={() => setShowDeleteConfirm(user)}>删除</button>
                                             </div>
@@ -404,9 +452,28 @@ const AdminUsersPage = () => {
                         <h3 style={styles.modalTitle}>重置密码 - {resetPasswordUser?.username}</h3>
                         {resetPasswordError && <div style={styles.errorMsg}>{resetPasswordError}<span style={styles.closeBtn} onClick={() => setResetPasswordError(null)}>×</span></div>}
                         <div style={styles.formGroup}>
-                            <label style={styles.label}>当前密码（已加密存储，不可查看）</label>
-                            <div style={{ padding: '8px 12px', background: '#f5f5f5', borderRadius: '4px', fontSize: '14px', color: '#999' }}>
-                                出于安全考虑，密码已加密存储，无法查看明文
+                            <label style={styles.label}>当前密码</label>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <span style={{
+                                    fontFamily: 'monospace',
+                                    fontSize: '14px',
+                                    padding: '8px 12px',
+                                    background: '#f5f5f5',
+                                    borderRadius: '4px',
+                                    flex: 1,
+                                    color: visiblePasswords[resetPasswordUser?.id] ? '#262626' : '#999'
+                                }}>
+                                    {visiblePasswords[resetPasswordUser?.id]
+                                        ? (resetPasswordUser?.plain_password || '(空)')
+                                        : '••••••••'
+                                    }
+                                </span>
+                                <button
+                                    style={styles.viewPwdBtn}
+                                    onClick={() => togglePasswordVisibility(resetPasswordUser?.id)}
+                                >
+                                    {visiblePasswords[resetPasswordUser?.id] ? '隐藏' : '查看'}
+                                </button>
                             </div>
                         </div>
                         <div style={styles.formGroup}>
@@ -416,6 +483,46 @@ const AdminUsersPage = () => {
                         <div style={styles.modalFooter}>
                             <button style={styles.cancelBtn} onClick={() => { setShowPasswordModal(false); setResetPasswordUser(null); setNewPassword(''); setResetPasswordError(null); }}>取消</button>
                             <button style={styles.confirmBtn} onClick={handleResetPassword}>确认重置</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* 用户日志弹窗 */}
+            {showLogModal && (
+                <div style={styles.modalOverlay}>
+                    <div style={{ ...styles.modal, maxWidth: '700px' }}>
+                        <h3 style={styles.modalTitle}>操作日志 - {logUser?.username}</h3>
+                        {logLoading ? (
+                            <div style={styles.loading}>加载中...</div>
+                        ) : userLogs.length === 0 ? (
+                            <p style={{ color: '#999', fontSize: '14px', textAlign: 'center', padding: '20px' }}>暂无操作记录</p>
+                        ) : (
+                            <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
+                                <table style={styles.table}>
+                                    <thead>
+                                        <tr>
+                                            <th style={{ ...styles.th, position: 'sticky', top: 0, background: '#fafafa' }}>时间</th>
+                                            <th style={{ ...styles.th, position: 'sticky', top: 0, background: '#fafafa' }}>操作</th>
+                                            <th style={{ ...styles.th, position: 'sticky', top: 0, background: '#fafafa' }}>详情</th>
+                                            <th style={{ ...styles.th, position: 'sticky', top: 0, background: '#fafafa' }}>IP</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {userLogs.map((log, i) => (
+                                            <tr key={log.id} style={i % 2 === 0 ? styles.trEven : styles.trOdd}>
+                                                <td style={styles.td}>{log.created_at ? new Date(log.created_at).toLocaleString() : '-'}</td>
+                                                <td style={{ ...styles.td, fontWeight: '500' }}>{log.action}</td>
+                                                <td style={styles.td}>{log.details || '-'}</td>
+                                                <td style={{ ...styles.td, fontFamily: 'monospace', fontSize: '12px' }}>{log.ip_address || '-'}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
+                        <div style={styles.modalFooter}>
+                            <button style={styles.cancelBtn} onClick={() => { setShowLogModal(false); setLogUser(null); setUserLogs([]); }}>关闭</button>
                         </div>
                     </div>
                 </div>
@@ -550,9 +657,11 @@ const styles = {
     actions: { display: 'flex', gap: '8px' },
     roleBtn: { padding: '4px 12px', background: '#e6f7ff', color: '#1890ff', border: '1px solid #91d5ff', borderRadius: '4px', cursor: 'pointer', fontSize: '12px' },
     passwordBtn: { padding: '4px 12px', background: '#f0f5ff', color: '#2f54eb', border: '1px solid #adc6ff', borderRadius: '4px', cursor: 'pointer', fontSize: '12px' },
+    logBtn: { padding: '4px 12px', background: '#fffbe6', color: '#d4b106', border: '1px solid #ffe58f', borderRadius: '4px', cursor: 'pointer', fontSize: '12px' },
     disableBtn: { padding: '4px 12px', background: '#fff7e6', color: '#fa8c16', border: '1px solid #ffd591', borderRadius: '4px', cursor: 'pointer', fontSize: '12px' },
     enableBtn: { padding: '4px 12px', background: '#f6ffed', color: '#52c41a', border: '1px solid #b7eb8f', borderRadius: '4px', cursor: 'pointer', fontSize: '12px' },
     deleteBtn: { padding: '4px 12px', background: '#fff2f0', color: '#ff4d4f', border: '1px solid #ffccc7', borderRadius: '4px', cursor: 'pointer', fontSize: '12px' },
+    viewPwdBtn: { padding: '2px 8px', background: '#fff', color: '#1890ff', border: '1px solid #91d5ff', borderRadius: '3px', cursor: 'pointer', fontSize: '11px', whiteSpace: 'nowrap' },
     badge: { display: 'inline-block', padding: '2px 8px', borderRadius: '10px', color: '#fff', fontSize: '12px', fontWeight: '500' },
     pagination: { display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '16px', padding: '16px' },
     pageBtn: { padding: '6px 14px', border: '1px solid #d9d9d9', borderRadius: '4px', background: '#fff', cursor: 'pointer', fontSize: '13px' },

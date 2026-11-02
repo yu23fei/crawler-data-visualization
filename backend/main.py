@@ -77,7 +77,7 @@ def index():
 @token_required
 def get_all_job():
     conn, cursor = _get_db_conn()
-    cursor.execute("SELECT * FROM jobs")
+    cursor.execute("SELECT * FROM jobs_51job")
     data = cursor.fetchall()
     conn.close()
     return jsonify({"code": 200, "msg": "success", "data": data})
@@ -97,7 +97,7 @@ def get_zhaopin_job():
 @token_required
 def get_merged_job():
     conn, cursor = _get_db_conn()
-    cursor.execute("SELECT *, '51job' as data_source FROM jobs")
+    cursor.execute("SELECT *, '51job' as data_source FROM jobs_51job")
     jobs_data = cursor.fetchall()
     cursor.execute("SELECT *, 'zhaopin' as data_source FROM zhaopin_jobs")
     zhaopin_data = cursor.fetchall()
@@ -118,7 +118,7 @@ def get_job_stats():
     conn, cursor = _get_db_conn()
     stats = {}
     if source in ('all', '51job'):
-        cursor.execute("SELECT COUNT(*) as count FROM jobs")
+        cursor.execute("SELECT COUNT(*) as count FROM jobs_51job")
         stats['51job'] = cursor.fetchone()['count']
     if source in ('all', 'zhaopin'):
         cursor.execute("SELECT COUNT(*) as count FROM zhaopin_jobs")
@@ -133,6 +133,11 @@ def get_job_stats():
 @token_required
 def zhaopin_job_page():
     return _job_page_by_table('zhaopin_jobs')
+
+@app.route('/api/51job/job/page')
+@token_required
+def job_51job_page():
+    return _job_page_by_table('jobs_51job')
 
 
 def _job_page_by_table(table_name):
@@ -247,7 +252,7 @@ def del_job(jid):
 
 CRAWLER_CONFIG = {
     '51job': {
-        'script': 'pcwjj\\qcwypc\\yingjie_spider\\api_crawler.py',
+        'script': 'crawler_pw.py',
         'workdir': os.path.join(
             os.path.dirname(os.path.abspath(__file__)),
             '..', 'pcwjj', 'qcwypc', 'yingjie_spider'
@@ -255,7 +260,7 @@ CRAWLER_CONFIG = {
         'display_name': '前程无忧'
     },
     'zhaopin': {
-        'script': 'pcwjj\\zlzppc\\web_crawler.py',
+        'script': 'crawler_pw.py',
         'workdir': os.path.join(
             os.path.dirname(os.path.abspath(__file__)),
             '..', 'pcwjj', 'zlzppc'
@@ -344,15 +349,22 @@ def start_crawler(source):
             "msg": f"爬虫脚本 {config['display_name']} 不存在，请联系管理员"
         }), 500
 
+    log_dir = os.path.join(config['workdir'], 'logs')
+    os.makedirs(log_dir, exist_ok=True)
+    log_file = os.path.join(log_dir, f'{source}_{datetime.datetime.now().strftime("%Y%m%d_%H%M%S")}.log')
+    stdout_f = open(log_file, 'w', encoding='utf-8')
+    stderr_f = open(log_file, 'w', encoding='utf-8')
+
     try:
         proc = subprocess.Popen(
             ['python', os.path.basename(config['script'])],
             cwd=config['workdir'],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            stdout=stdout_f,
+            stderr=subprocess.STDOUT,
             shell=False,
             creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if os.name == 'nt' else 0
         )
+        stdout_f.close()
 
         crawler_status[source]['status'] = 'running'
         crawler_status[source]['started_at'] = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -422,7 +434,7 @@ def crawler_all_status():
     return jsonify({"code": 200, "data": result})
 
 
-JOB_TABLES = ['jobs', 'zhaopin_jobs', 'jobs_core', 'jobs_analysis', 'jobs_company']
+JOB_TABLES = ['jobs', 'jobs_51job', 'zhaopin_jobs', 'jobs_core', 'jobs_analysis', 'jobs_company']
 
 
 @app.route('/api/admin/database/tables', methods=['GET'])
@@ -611,9 +623,9 @@ def get_recent_jobs():
     results = []
     if source in ('all', '51job'):
         cursor.execute("""
-            SELECT id, jobid as source_id, job_url, position_name,
+            SELECT id, position_id as source_id, '' as job_url, position_name,
                    company_name, salary, city, created_at, '51job' as data_source
-            FROM jobs ORDER BY created_at DESC LIMIT %s
+            FROM jobs_51job ORDER BY created_at DESC LIMIT %s
         """, (limit,))
         results.extend(cursor.fetchall())
     if source in ('all', 'zhaopin'):

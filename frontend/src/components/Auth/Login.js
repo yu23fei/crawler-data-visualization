@@ -55,9 +55,10 @@ const Login = () => {
         try {
             const res = await authAPI.login(form)
             if (res.code === 200) {
-                setToken(res.data.token)
-                setUser({ ...res.data.user, role: res.data.role })
-                const role = res.data.role
+                const d = res.data
+                setToken(d.token)
+                setUser({ ...d.user, role: d.role })
+                const role = d.role
                 if (role === 'admin') navigate('/admin/users')
                 else if (role === 'vip') navigate('/vip/charts')
                 else navigate('/guest/charts')

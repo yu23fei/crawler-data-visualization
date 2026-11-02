@@ -42,12 +42,14 @@ api.interceptors.response.use(
     }
 );
 
-// 认证相关 API（登录、注册、重置密码、获取个人信息、VIP申请）
+// 认证相关 API（登录、注册、重置密码、个人信息管理、VIP申请）
 export const authAPI = {
     login: (data) => api.post('/api/auth/login', data),
     register: (data) => api.post('/api/auth/register', data),
     resetPassword: (data) => api.post('/api/auth/reset-password', data),
     getProfile: () => api.get('/api/auth/profile'),
+    updateProfile: (data) => api.put('/api/auth/update-profile', data),
+    changePassword: (data) => api.put('/api/auth/change-password', data),
     applyVip: () => api.post('/api/auth/apply-vip')
 };
 
@@ -60,6 +62,7 @@ export const adminAPI = {
     updateUserStatus: (userId, data) => api.put(`/api/admin/users/${userId}/status`, data),
     resetUserPassword: (userId, data) => api.put(`/api/admin/users/${userId}/password`, data),
     getUserLogs: (params) => api.get('/api/admin/users/logs', { params }),
+    getUserLogsByUserId: (userId, params) => api.get(`/api/admin/users/${userId}/logs`, { params }),
     getRoles: () => api.get('/api/admin/roles'),
     getPermissions: () => api.get('/api/admin/permissions'),
     updateRolePermissions: (roleId, data) => api.put(`/api/admin/roles/${roleId}/permissions`, data),
@@ -72,7 +75,13 @@ export const adminAPI = {
 export const dataAPI = {
     getAnalysis: () => api.get('/api/v2/analysis'),
     getJobPage: (params) => api.get('/api/job/page', { params }),
-    filterJobs: (params) => api.get('/api/job/filter', { params })
+    filterJobs: (params) => api.get('/api/job/filter', { params }),
+    getJobDetail: (params) => api.get('/api/job/detail', { params }),
+    addFavorite: (data) => api.post('/api/job/favorite', data),
+    removeFavorite: (data) => api.delete('/api/job/favorite', { data }),
+    getFavorites: (params) => api.get('/api/job/favorites', { params }),
+    recordHistory: (data) => api.post('/api/job/history', data),
+    getHistory: (params) => api.get('/api/job/history', { params })
 };
 
 // 爬虫管理 API（前程无忧 + 智联招聘，独立控制）

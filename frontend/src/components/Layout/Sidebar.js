@@ -15,19 +15,23 @@ const Sidebar = () => {
                     { id: 'users', label: '用户管理', path: '/admin/users' },
                     { id: 'crawler', label: '爬虫管理', path: '/admin/crawler' },
                     { id: 'database', label: '数据库管理', path: '/admin/database' },
-                    { id: 'charts', label: '数据图表', path: '/admin/charts' }
+                    { id: 'filter', label: '岗位筛选', path: '/admin/filter' },
+                    { id: 'charts', label: '数据图表', path: '/admin/charts' },
+                    { id: 'profile', label: '个人信息', path: '/admin/profile' }
                 ];
             case 'vip':
                 return [
                     { id: 'charts', label: '数据图表', path: '/vip/charts' },
-                    { id: 'data', label: '数据查看', path: '/vip/data' },
                     { id: 'filter', label: '岗位筛选', path: '/vip/filter' },
+                    { id: 'favorites', label: '我的收藏', path: '/vip/favorites' },
+                    { id: 'history', label: '浏览历史', path: '/vip/history' },
                     { id: 'profile', label: '个人信息', path: '/vip/profile' }
                 ];
             case 'guest':
             default:
                 return [
                     { id: 'charts', label: '数据图表', path: '/guest/charts' },
+                    { id: 'data', label: '数据查看', path: '/guest/data' },
                     { id: 'profile', label: '个人信息', path: '/guest/profile' }
                 ];
         }
