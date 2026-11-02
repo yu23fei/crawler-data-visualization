@@ -39,16 +39,17 @@ recruitment-platform/
 │   │   └── data.py           # 数据路由
 │   ├── core/                  # 核心模块
 │   │   ├── config.py         # 配置文件
-│   │   └── init_db.py        # 数据库初始化
+│   │   ├── init_db.py        # 数据库初始化
+│   │   └── optimize_db.py    # 数据库优化
 │   ├── models/                # 数据模型
 │   │   ├── user.py           # 用户模型
-│   │   ├── role.py           # 角色模型
-│   │   └── permission.py     # 权限模型
-│   ├── services/              # 服务层（业务逻辑）
+│   │   └── role.py           # 角色模型
 │   ├── utils/                 # 工具函数
-│   │   └── security.py       # 安全工具
+│   │   ├── security.py       # 安全工具（密码哈希、JWT）
+│   │   └── database.py       # 数据库连接工具
 │   ├── middleware/            # 中间件
 │   │   └── auth.py           # JWT认证中间件
+│   ├── tests/                 # 单元测试
 │   └── main.py               # 主应用入口
 │
 ├── frontend/                  # 前端代码（React）
@@ -56,7 +57,11 @@ recruitment-platform/
 │   │   └── index.html        # HTML入口
 │   ├── src/                   # 源代码
 │   │   ├── components/       # 组件
+│   │   │   ├── Admin/        # 管理后台组件
 │   │   │   ├── Auth/         # 认证组件
+│   │   │   ├── Charts/       # 图表组件
+│   │   │   ├── Data/         # 数据页组件
+│   │   │   ├── Filter/       # 筛选组件
 │   │   │   └── Layout/       # 布局组件
 │   │   ├── utils/            # 工具函数
 │   │   ├── App.js            # 主应用组件
@@ -65,6 +70,16 @@ recruitment-platform/
 │   ├── .eslintrc.json        # ESLint配置
 │   └── .prettierrc           # Prettier配置
 │
+├── pcwjj/                     # 爬虫模块
+│   ├── normalized_db.py      # 数据归一化入库
+│   ├── resync_all.py         # 全量数据重同步
+│   ├── qcwypc/               # 前程无忧爬虫
+│   │   └── yingjie_spider/
+│   │       └── crawler_pw.py # 应届生招聘 Playwright 爬虫
+│   └── zlzppc/               # 智联招聘爬虫
+│       └── crawler_pw.py     # 智联招聘 Playwright 爬虫
+│
+├── fix_data.py                # 数据修复脚本
 ├── .env                       # 环境变量
 ├── .env.example               # 环境变量示例
 ├── .gitignore                 # Git忽略文件
@@ -77,8 +92,9 @@ recruitment-platform/
 ### 1. 安装后端依赖
 
 ```bash
-cd backend
-pip install -r ../requirements.txt
+pip install -r requirements.txt
+# 爬虫模块基于 Playwright，需额外安装浏览器内核
+playwright install chromium
 ```
 
 ### 2. 配置环境变量
