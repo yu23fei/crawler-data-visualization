@@ -146,19 +146,40 @@ npm start
 - `POST /api/auth/login` - 用户登录
 - `POST /api/auth/reset-password` - 密码重置
 - `GET /api/auth/profile` - 获取用户信息
+- `PUT /api/auth/update-profile` - 更新用户信息
+- `PUT /api/auth/change-password` - 修改密码
+- `POST /api/auth/apply-vip` - 申请 VIP
 
 ### 管理员API
 
 - `GET /api/admin/users` - 获取用户列表
+- `POST /api/admin/users` - 新增用户
+- `DELETE /api/admin/users/<id>` - 删除用户
 - `PUT /api/admin/users/<id>/role` - 修改用户角色
 - `PUT /api/admin/users/<id>/status` - 启用/禁用用户
-- `GET /api/admin/users/logs` - 查看用户活动日志
+- `PUT /api/admin/users/<id>/reset-password` - 重置用户密码
+- `GET /api/admin/permissions` - 获取权限列表
+- `GET /api/admin/roles` - 获取角色列表
+- `PUT /api/admin/roles/<id>/permissions` - 修改角色权限
+- `GET /api/admin/vip-applications` - 获取 VIP 申请列表
+- `POST /api/admin/vip-applications/<id>/approve` - 审批通过 VIP 申请
+- `POST /api/admin/vip-applications/<id>/reject` - 驳回 VIP 申请
+- `GET /api/admin/users/<id>/logs` - 查看用户活动日志
 
 ### 数据API
 
 - `GET /api/v2/analysis` - 获取分析数据
+- `GET /api/v2/data` - 获取数据
+- `POST /api/v2/filter` - 筛选数据
+- `GET /api/v2/filter/options` - 获取筛选选项
 - `GET /api/job/page` - 分页查询岗位数据
 - `GET /api/job/filter` - 筛选岗位数据
+- `GET /api/job/detail` - 获取岗位详情
+- `POST /api/job/favorite` - 收藏岗位
+- `DELETE /api/job/favorite` - 取消收藏
+- `GET /api/job/favorites` - 获取收藏列表
+- `POST /api/job/history` - 记录浏览历史
+- `GET /api/job/history` - 获取浏览历史
 
 ## 开发说明
 
