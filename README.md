@@ -79,7 +79,6 @@ recruitment-platform/
 │   └── zlzppc/               # 智联招聘爬虫
 │       └── crawler_pw.py     # 智联招聘 Playwright 爬虫
 │
-├── fix_data.py                # 数据修复脚本
 ├── .env                       # 环境变量
 ├── .env.example               # 环境变量示例
 ├── .gitignore                 # Git忽略文件
